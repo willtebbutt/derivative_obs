@@ -1,4 +1,4 @@
-using Stheno, Optim, Plots
+using Stheno, Optim, Plots, Zygote
 
 using Stheno: derivative
 
@@ -25,7 +25,7 @@ Compute the negative log marginal likelihood of the parameters θ given observat
 f at x_f and observations y_df of df at x_df.
 """
 function nlml(
-    θ::Tuple{Real, Real},
+    θ,
     x_f::AbstractVector{<:Real},
     y_f::AbstractVector{<:Real},
     x_df::AbstractVector{<:Real},
