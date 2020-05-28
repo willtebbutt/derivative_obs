@@ -2,10 +2,12 @@ using Stheno, Optim, Plots, Zygote
 
 using Stheno: derivative
 
+const σ²_noise = 1e-3
+
 # Helper function: Parameter handling.
 function unpack(θ)
-    σ² = exp(θ[1]) + 1e-6
-    l = exp(θ[2]) + 1e-6
+    σ² = exp(θ[1]) + 1e-3
+    l = exp(θ[2]) + 1e-3
     return σ², l
 end
 
@@ -34,8 +36,8 @@ function nlml(
     f, df = build_model(θ)
 
     # Specify points in processes at which we'll make observations.
-    fx = f(x_f, 1e-3)
-    dfx = f(x_df, 1e-3)
+    fx = f(x_f, σ²_noise)
+    dfx = df(x_df, σ²_noise)
     return -logpdf([fx, dfx], [y_f, y_df])
 end
 
@@ -46,13 +48,15 @@ dg = cos
 x_g = range(-10.0, 10.0; length=15);
 x_dg = range(-10.0, 10.0; length=20);
 
-y_g = g.(x_g)
-y_dg = dg.(x_dg)
+y_g = g.(x_g) .+ sqrt(σ²_noise) .* randn(length(x_g));
+y_dg = dg.(x_dg) .+ sqrt(σ²_noise) .* randn(length(x_dg));
+
+nlml(θ) = nlml(θ, x_g, y_g, x_dg, y_dg)
 
 # Optimise the hyper-parameters using a gradient-free method to start with.
 θ0 = randn(2);
-results = Optim.optimize(θ -> nlml(θ, x_g, y_g, x_dg, y_dg), θ0, NelderMead())
-θ_opt  = unpack(results.minimizer);
+results = Optim.optimize(nlml, θ -> only(Zygote.gradient(nlml, θ)), θ0, BFGS(); inplace=false)
+θ_opt  = results.minimizer;
 
 # Get process at optimal parameters, and produce the posteriors.
 f, df = build_model(θ_opt);
@@ -64,11 +68,8 @@ x_pr = range(-15.0, 15.0; length=250);
 plt = plot();
 scatter!(plt, x_g, y_g; color=:red, label="y_g");
 scatter!(plt, x_dg, y_dg; color=:blue, label="y_dg");
-plot!(plt, f_post(x_pr, 1e-3); label="f_post");
-plot!(plt, df_post(x_pr, 1e-3); label="df_post");
+plot!(plt, x_pr, g.(x_pr); color=:red, label="g");
+plot!(plt, x_pr, dg.(x_pr); color=:blue, label="dg");
+plot!(plt, f_post(x_pr, 1e-3); samples=10, label="f_post");
+plot!(plt, df_post(x_pr, 1e-3); samples=10, label="df_post");
 display(plt);
-
-# For some reason, this doesn't work. I'm trying to get to the bottom of it at the minute.
-# See example in "Getting Started" bit of Stheno docs for how this would be used if it
-# worked.
-Zygote.gradient(θ -> nlml(θ, x_g, y_g, x_dg, y_dg), θ_opt)
